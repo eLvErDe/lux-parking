@@ -11,6 +11,17 @@ except ImportError:
     print("Missing Python3 module requests, please apt-get install python3-requests")
     sys.exit(1)
 try:
+    import sqlalchemy
+    import sqlalchemy.ext.declarative
+except ImportError:
+    print("Missing Python module SQLAlchemy, please apt-get install python3-sqlalchemy")
+    sys.exit(1)
+try:
+    import MySQLdb
+except ImportError:
+    print("Missing Python module MySQLdb, please apt-get install python3-mysqldb")
+    sys.exit(1)
+try:
     import feedparser
 except ImportError:
     print("Missing Python3 module feedparser, please apt-get install python3-feedparser")
@@ -24,7 +35,8 @@ def parse_args():
     # Raise terminal size, See https://bugs.python.org/issue13041
     os.environ['COLUMNS'] = str(shutil.get_terminal_size().columns)
     argparser = ArgumentParser(description='Luxembourg parking lot data poller', formatter_class=ArgumentDefaultsHelpFormatter)
-    argparser.add_argument('--url',         type=str, default='http://service.vdl.lu/rss/circulation_guidageparking.php', help='Extract data from vdl.lu RSS stream')
+    argparser.add_argument('--url',   type=str, default='http://service.vdl.lu/rss/circulation_guidageparking.php', help='Extract data from vdl.lu RSS stream')
+    argparser.add_argument('--dburl', type=str, default='mysql://luxparking:luxparkling@localhost//luxparking?charset=utf8', help='SQLAlchemy URL to database')
 
     return argparser.parse_args()
 
@@ -95,36 +107,89 @@ if __name__ == '__main__':
     # HTTP requester object
     api = HttpRequester(url=config.url)
 
+    # SQLAlchemy
+    try:
+        db = sqlalchemy.create_engine(config.dburl)
+        db_base_model = sqlalchemy.ext.declarative.declarative_base()
+
+        class ParkingLot(db_base_model):
+            __tablename__ = 'lots'
+
+            id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, index=True)
+            name = sqlalchemy.Column(sqlalchemy.String(50), nullable=False)
+            lat = sqlalchemy.Column(sqlalchemy.Float, nullable=False)
+            lon = sqlalchemy.Column(sqlalchemy.Float, nullable=False)
+            price = sqlalchemy.Column(sqlalchemy.Text)
+            info = sqlalchemy.Column(sqlalchemy.Text)
+
+        class ParkingEntry(db_base_model):
+            __tablename__ = 'entries'
+
+            id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, index=True)
+            park_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('lots.id'), nullable=False, index=True)
+            free = sqlalchemy.Column(sqlalchemy.Integer)
+            total = sqlalchemy.Column(sqlalchemy.Integer)
+            full = sqlalchemy.Column(sqlalchemy.Boolean)
+            timestamp = sqlalchemy.Column(sqlalchemy.DateTime, nullable=False, index=True)
+
+        ParkingLot.metadata.create_all(db)
+        ParkingEntry.metadata.create_all(db)
+
+    except Exception as e:
+        logger.error('An error occurred while initializing database system: %s', e)
+        sys.exit(2)
+
     while True:
 
         try:
             rss = api.poll()
             feed = feedparser.parse(rss)
             logger.info('New RSS feed received successfully')
+
+            # Start database session
+            Session = sqlalchemy.orm.sessionmaker(bind=db, autoflush=False)
+            session = Session()
+
             for entry in feed.entries:
 
                 try:
-                    park_used  = None if entry['vdlxml_actuel']  == '' else int(entry['vdlxml_actuel'])
+                    park_free  = None if entry['vdlxml_actuel']  == '' else int(entry['vdlxml_actuel'])
                     park_total = None if entry['vdlxml_total']   == '' else int(entry['vdlxml_total'])
-                    park_full  = None if entry['vdlxml_complet'] == '' else bool(entry['vdlxml_actuel'])
+                    park_full  = None if entry['vdlxml_complet'] == '' else bool(int(entry['vdlxml_complet']))
                     park_name  = entry['title']
                     # Lol at vdl.lu web team
                     if park_name == 'Beggen':
-                        park_id = 0
+                        park_id = 999999
                     else:
                         park_id = int(entry['id'])
                     park_info  = entry['vdlxml_divers']
                     park_price = entry['vdlxml_paiement']
                     park_lat   = float(entry['vdlxml_localisationlatitude'])
                     park_long  = float(entry['vdlxml_localisationlongitude'])
-                    logger.info('Parking "%s(%d)": %s / %s)', park_name, park_id, park_used, park_total)
+                    logger.info('Parking "%s(%d)": %s / %s)', park_name, park_id, park_free, park_total)
+
+                    db_lot = ParkingLot(id=park_id,
+                                        name=park_name,
+                                        lat=park_lat,
+                                        lon=park_long,
+                                        price=park_price,
+                                        info=park_info)
+                    db_entry = ParkingEntry(park_id=park_id,
+                                          free=park_free,
+                                          total=park_total,
+                                          full=park_full,
+                                          timestamp=datetime.datetime.now().replace(second=00))
+                    session.merge(db_lot)
+                    session.add(db_entry)
 
                 except Exception as e:
                     try:
-                        logger.error('Processing error occurred when trying to handle parking "%s" data', park_name)
+                        logger.error('Processing error occurred when trying to handle parking "%s" data: %s', park_name, e)
                     except Exception as e:
                         logger.error('Processing error occurred when trying to handle unknown parking (even no title entry)')
 
+            # Insert to db
+            session.commit()
 
         # Will catch any successful HTTP request containing body_text and status_code
         # First one catches 4xx and 5xx, second one is homemade and catches non wanted success HTTP code
