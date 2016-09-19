@@ -1,0 +1,15 @@
+[Unit]
+Description=LuxParking Poller
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/luxparking-poller
+ExecStart=/srv/projects/luxparking/poller/lux-parking-poller.py --dburl $DBURL
+Restart=always
+RestartSec=10
+User=nobody
+Group=nogroup
+
+[Install]
+WantedBy=multi-user.target
