@@ -35,7 +35,7 @@ def parse_args():
     # Raise terminal size, See https://bugs.python.org/issue13041
     os.environ['COLUMNS'] = str(shutil.get_terminal_size().columns)
     argparser = ArgumentParser(description='Luxembourg parking lot data poller', formatter_class=ArgumentDefaultsHelpFormatter)
-    argparser.add_argument('--url',   type=str, default='http://service.vdl.lu/rss/circulation_guidageparking.php', help='Extract data from vdl.lu RSS stream')
+    argparser.add_argument('--url',   type=str, default='https://feed.vdl.lu/circulation/parking/feed.rss', help='Extract data from vdl.lu RSS stream')
     argparser.add_argument('--dburl', type=str, default='mysql://luxparking:luxparkling@localhost//luxparking?charset=utf8', help='SQLAlchemy URL to database')
 
     return argparser.parse_args()
