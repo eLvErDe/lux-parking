@@ -171,7 +171,7 @@ if __name__ == '__main__':
                     park_price = entry['vdlxml_paiement']
                     park_lat   = float(entry['vdlxml_localisationlatitude'])
                     park_long  = float(entry['vdlxml_localisationlongitude'])
-                    logger.info('Parking "%s(%d)": %s / %s)', park_name, park_id, park_free, park_total)
+                    logger.info('Parking "%s(%d)": %s / %s', park_name, park_id, park_free, park_total)
 
                     db_lot = ParkingLot(id=park_id,
                                         name=park_name,
