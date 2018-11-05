@@ -96,7 +96,12 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     out_hdlr = logging.StreamHandler(sys.stdout)
-    out_hdlr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(module)s %(message)s'))
+
+    if os.getenv('NO_LOGS_TS', None) is not None:
+        log_formatter='%(levelname)s %(module)s %(message)s'
+    else:
+        log_formatter='%(asctime)s %(levelname)s %(module)s %(message)s'
+    out_hdlr.setFormatter(logging.Formatter(log_formatter))
     out_hdlr.setLevel(logging.INFO)
     logger.addHandler(out_hdlr)
     logger.info('Logger successfully initiliazed')

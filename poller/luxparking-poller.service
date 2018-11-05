@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
+Environment=NO_LOGS_TS=1
 EnvironmentFile=/etc/default/luxparking-poller
 ExecStart=/srv/projects/lux-parking/poller/lux-parking-poller.py --dburl $DBURL
 Restart=always
