@@ -169,8 +169,13 @@ if __name__ == '__main__':
                         park_id = int(entry['id'])
                     park_info  = entry['vdlxml_divers']
                     park_price = entry['vdlxml_paiement']
-                    park_lat   = float(entry['vdlxml_localisationlatitude'])
-                    park_long  = float(entry['vdlxml_localisationlongitude'])
+                    park_lat   = entry['vdlxml_localisationlatitude']
+                    park_lat = float(park_lat) if park_lat else None  # Luxembourg Sud B has no information atm
+                    park_long  = entry['vdlxml_localisationlongitude']
+                    park_long = float(park_long) if park_long else None
+                    if park_lat is None or park_long is None:
+                        logger.warning("Parking %s has not lat/long information, probaly not yet usable", park_name)
+                        continue
                     logger.info('Parking "%s(%d)": %s / %s', park_name, park_id, park_free, park_total)
 
                     db_lot = ParkingLot(id=park_id,
@@ -189,7 +194,7 @@ if __name__ == '__main__':
 
                 except Exception as e:
                     try:
-                        logger.error('Processing error occurred when trying to handle parking "%s" data: %s', park_name, e)
+                        logger.exception('Processing error occurred when trying to handle parking "%s" data: %s', park_name, e)
                     except Exception as e:
                         logger.error('Processing error occurred when trying to handle unknown parking (even no title entry)')
 
